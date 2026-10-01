@@ -22,7 +22,7 @@ Features
 
 Philosophy
 
-«Your music. Your files. Your data. Your statistics.»
+Your music. Your files. Your data. Your statistics.
 
 MyMusic treats the user's music collection as the source of truth rather than trying to replace it with a centralized streaming catalog.
 
@@ -30,4 +30,4 @@ The desktop application can host the local library and API, while other devices 
 
 This is a personal project, built primarily for experimentation, learning, and creating a music ecosystem that I actually want to use.
 
-«🚧 Still in development.»
+🚧 Still in development.
