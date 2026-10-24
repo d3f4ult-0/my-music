@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.mymusic.player',
+  appId: 'com.mymusic.audio',
   appName: 'MyMusic',
   webDir: 'dist',
   bundledWebRuntime: false,
