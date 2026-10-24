@@ -27,6 +27,10 @@ android {
             debuggable true
         }
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
 }
 
 // Bypass AAR metadata check for legacy and modern dependency compatibility
