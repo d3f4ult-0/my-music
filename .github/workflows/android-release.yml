@@ -2,13 +2,10 @@ name: Build & Release Android APK
 
 on:
   push:
-    tags:
-      - 'v*'
     branches:
       - main
-    paths:
-      - 'web/**'
-      - '.github/workflows/android-release.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -38,9 +35,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Install Web Dependencies
         working-directory: ./web
@@ -83,27 +77,27 @@ jobs:
           name: MyMusic-Android-APK
           path: build-artifacts/*.apk
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+      - name: Create or Update GitHub Release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          name: MyMusic Player ${{ github.event.inputs.release_tag || github.ref_name }}
+          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.0' }}
+          name: MyMusic Player v1.0.0
           draft: false
           prerelease: false
           body: |
             ### 🎵 MyMusic Player Android Release
             
-            Ultra-compact, low-end Android optimized music player with:
+            Ultra-compact, low-end Android optimized music player:
             - **Spicy Lyrics Engine**: Real-time synced line highlighting with LRCLIB auto-search.
             - **Ambient Rotating Vinyl**: 40s GPU-accelerated rotating cover art with dynamic dominant color blending.
             - **Direct LAN & P2P Streaming**: Stream lossless audio from your PC or local peers without registration walls.
             - **Background Audio & Media Notification**: Native lockscreen and notification drawer playback controls.
             - **Tiny Footprint**: < 4MB APK size, < 60MB RAM footprint on Android 7.0+.
             
-            #### 📦 Download
-            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/MyMusic-debug.apk)** (Ready to install immediately on any phone)
-            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/MyMusic-release.apk)**
+            #### 📦 Download APKs
+            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-debug.apk)** (Direct 1-tap install on Android)
+            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-release.apk)**
           files: build-artifacts/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
