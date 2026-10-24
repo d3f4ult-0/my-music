@@ -63,11 +63,14 @@ jobs:
       - name: Locate & Rename APK
         run: |
           mkdir -p build-artifacts
-          if [ -f "./web/android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+          if [ -f "./web/android/app/build/outputs/apk/release/app-release.apk" ]; then
+            cp ./web/android/app/build/outputs/apk/release/app-release.apk build-artifacts/MyMusic-release.apk
+          elif [ -f "./web/android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
             cp ./web/android/app/build/outputs/apk/release/app-release-unsigned.apk build-artifacts/MyMusic-release.apk
           fi
           if [ -f "./web/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
             cp ./web/android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/MyMusic-debug.apk
+            cp ./web/android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/MyMusic-Player.apk
           fi
           ls -lh build-artifacts/
 
@@ -88,15 +91,15 @@ jobs:
           body: |
             ### 🎵 MyMusic Player Android Release
             
-            Ultra-compact, low-end Android optimized music player:
             - **Spicy Lyrics Engine**: Real-time synced line highlighting with LRCLIB auto-search.
             - **Ambient Rotating Vinyl**: 40s GPU-accelerated rotating cover art with dynamic dominant color blending.
             - **Direct LAN & P2P Streaming**: Stream lossless audio from your PC or local peers without registration walls.
             - **Background Audio & Media Notification**: Native lockscreen and notification drawer playback controls.
-            - **Tiny Footprint**: < 4MB APK size, < 60MB RAM footprint on Android 7.0+.
+            - **Direct Install**: Pre-signed for seamless installation on any Android phone (Android 6.0+).
             
-            #### 📦 Download APKs
-            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-debug.apk)** (Direct 1-tap install on Android)
+            #### 📦 Download
+            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-Player.apk)** (⭐ Recommended: 1-click install)
+            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-debug.apk)**
             - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-release.apk)**
           files: build-artifacts/*.apk
         env:
