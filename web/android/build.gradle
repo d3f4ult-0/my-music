@@ -22,7 +22,7 @@ allprojects {
         google()
         mavenCentral()
     }
-    tasks.matching { it.name.contains("AarMetadata") || it.name.contains("DuplicateClasses") }.configureEach {
+    tasks.matching { it.name.contains("DuplicateClasses") }.configureEach {
         enabled = false
     }
     configurations.all {

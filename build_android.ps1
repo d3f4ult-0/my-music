@@ -45,7 +45,7 @@ if (Test-Path $Gradlew) {
     if ($JavaCmd -and $env:JAVA_HOME) {
         Write-Host "Java found at: $($JavaCmd.Source). Attempting APK compilation..." -ForegroundColor Green
         Set-Location "$ScriptDir\web\android"
-        cmd /c "gradlew.bat assembleRelease"
+        cmd /c "gradlew.bat :app:assembleRelease"
         if ($LASTEXITCODE -eq 0) {
             $ApkPath = "$ScriptDir\web\android\app\build\outputs\apk\release\app-release-unsigned.apk"
             Write-Host "`n==================================================" -ForegroundColor Green
@@ -56,7 +56,7 @@ if (Test-Path $Gradlew) {
             exit 0
         } else {
             Write-Host "[INFO] Running debug assembly fallback..." -ForegroundColor Yellow
-            cmd /c "gradlew.bat assembleDebug"
+            cmd /c "gradlew.bat :app:assembleDebug"
         }
     }
 }

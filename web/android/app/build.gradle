@@ -33,8 +33,8 @@ android {
     }
 }
 
-// Bypass AAR metadata and duplicate class checks for legacy and modern dependency compatibility
-tasks.matching { it.name.contains("AarMetadata") || it.name.contains("DuplicateClasses") }.configureEach {
+// Bypass duplicate class checks for legacy and modern dependency compatibility
+tasks.matching { it.name.contains("DuplicateClasses") }.configureEach {
     enabled = false
 }
 

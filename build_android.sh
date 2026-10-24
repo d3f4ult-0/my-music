@@ -28,7 +28,7 @@ cd "$SCRIPT_DIR/web/android"
 if [ -f "./gradlew" ] && command -v java >/dev/null 2>&1; then
     chmod +x ./gradlew
     echo "Compiling Android release APK with Proguard/R8 minification..."
-    ./gradlew assembleRelease || ./gradlew assembleDebug
+    ./gradlew :app:assembleRelease || ./gradlew :app:assembleDebug
     echo -e "\nNative build complete. APKs located in web/android/app/build/outputs/apk/"
 else
     echo -e "\nAndroid project is completely synced and ready."
