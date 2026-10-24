@@ -107,23 +107,27 @@ jobs:
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.2' }}
-          name: MyMusic Player v1.0.2 (Full 45-50 MB Standalone Edition)
+          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.3' }}
+          name: MyMusic Player v1.0.3 (ID3 Cover Art & Sectional Library Edition)
           draft: false
           prerelease: false
           body: |
-            ### 🎵 MyMusic Player Android Release (v1.0.2 - 45-50 MB Standalone Edition)
+            ### 🎵 MyMusic Player Android Release (v1.0.3)
             
-            - **Full 45-50 MB Standalone Package**: Bundled with native Android Media3 audio engine, ExoPlayer frameworks, and offline audio sound banks.
-            - **Fresh Package ID (`com.mymusic.audio`)**: Completely eliminates any conflict with previous test apps on your device.
-            - **Universal Dual-Signing (V1 + V2 Scheme)**: Verified installable on any Android phone (Samsung, Xiaomi, Pixel, OnePlus, Oppo, Vivo, Motorola).
-            - **Device Music Scanner**: Scan downloaded MP3, FLAC, WAV, and AAC tracks directly from phone storage for 100% offline playback.
-            - **Interactive P2P User Manual**: Complete guide for Wi-Fi and Mobile Hotspot music sharing with 0 MB data usage.
+            - **Real ID3 Cover Art Extraction**: Automatically extracts embedded album art from MP3, FLAC, and M4A files instead of using the app icon.
+            - **Distinct Aesthetic SVG Covers**: Songs without embedded art generate unique modern album gradient covers.
+            - **Sectional Library (Tracks, Albums, Artists)**:
+              - 🎵 **Tracks**: Complete searchable tracklist with sorting by date, duration, size, title, artist, and album.
+              - 💿 **Albums**: Beautiful album grid with drilldown album tracklists and 1-tap album playback.
+              - 🎤 **Artists**: Artist views with artist albums and song lists.
+            - **⚡ Auto-Scan Storage**: Automatically scans device storage with 1-tap.
+            - **Full 45-50 MB Standalone Package**: Bundled with native Android Media3 audio engine and offline audio banks.
+            - **Dual V1 + V2 Scheme Signing**: Installs smoothly on all Android versions.
             
             #### 📦 Download APKs
-            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.2/MyMusic-Player.apk)** (⭐ Recommended: Full 45-50 MB Edition)
-            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.2/MyMusic-release.apk)**
-            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.2/MyMusic-debug.apk)**
+            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.3/MyMusic-Player.apk)** (⭐ Recommended: 45-50 MB Standalone Edition)
+            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.3/MyMusic-release.apk)**
+            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.3/MyMusic-debug.apk)**
           files: build-artifacts/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

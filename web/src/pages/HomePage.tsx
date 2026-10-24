@@ -13,6 +13,7 @@ import {
   WifiOff,
   CheckCircle,
   FileAudio,
+  Zap,
 } from 'lucide-react';
 import { HomeFeed, Song } from '../types';
 import { apiRequest, resolveAssetUrl } from '../api/client';
@@ -33,12 +34,27 @@ export const HomePage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayerStore();
-  const { offlineTracks, isScanning, scanProgress, scanDeviceFiles } = useOfflineManager();
+  const { offlineTracks, isScanning, scanProgress, scanDeviceFiles, autoScanStorage } = useOfflineManager();
 
   const { onAddToPlaylist, onReport } = useOutletContext<{
     onAddToPlaylist: (song: Song) => void;
     onReport: (song: Song) => void;
   }>();
+
+  const handleAutoScan = async () => {
+    try {
+      setScanMessage('Auto-scanning device storage for songs...');
+      const count = await autoScanStorage();
+      if (count > 0) {
+        setScanMessage(`Auto-scan complete! Added ${count} songs with album art.`);
+      } else {
+        fileInputRef.current?.click();
+      }
+      setTimeout(() => setScanMessage(null), 4000);
+    } catch {
+      fileInputRef.current?.click();
+    }
+  };
 
   useEffect(() => {
     apiRequest<HomeFeed>('/home')
@@ -149,12 +165,21 @@ export const HomePage: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
+              onClick={handleAutoScan}
+              disabled={isScanning}
+              className="px-4 py-2 bg-gradient-to-r from-primary to-emerald-400 text-black font-extrabold text-xs rounded-xl hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-md shadow-primary/25"
+            >
+              <Zap size={14} className="fill-black" />
+              <span>Auto-Scan</span>
+            </button>
+
+            <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isScanning}
-              className="px-4 py-2 bg-primary text-black font-bold text-xs rounded-xl hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md shadow-primary/20"
+              className="px-3.5 py-2 bg-surface hover:bg-surface-hover text-white border border-border-subtle rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
             >
               <Music size={14} />
-              <span>Scan / Pick Songs</span>
+              <span>Pick Files</span>
             </button>
 
             <button
@@ -162,7 +187,7 @@ export const HomePage: React.FC = () => {
               className="px-3.5 py-2 bg-surface hover:bg-surface-hover text-white border border-border-subtle rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
             >
               <WifiOff size={14} className="text-primary" />
-              <span>View Library ({offlineTracks.length})</span>
+              <span>Library ({offlineTracks.length})</span>
             </button>
           </div>
         </div>

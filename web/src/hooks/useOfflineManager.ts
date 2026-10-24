@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Song, OfflineTrack } from '../types';
+import {
+  extractFullAudioMetadata,
+  generateAlbumCover,
+  probeAudioDuration,
+  parseFilenameFallback,
+  detectCodec,
+} from '../utils/audioMetadataExtractor';
 
 const DB_NAME = 'mymusic_offline_db';
 const DB_VERSION = 1;
@@ -36,90 +43,6 @@ export async function getOfflineTrackBlob(songId: number): Promise<Blob | null> 
   }
 }
 
-export function probeAudioDuration(blob: Blob): Promise<number> {
-  return new Promise((resolve) => {
-    try {
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio();
-      audio.preload = 'metadata';
-      audio.src = url;
-
-      let settled = false;
-      const finish = (duration: number) => {
-        if (!settled) {
-          settled = true;
-          URL.revokeObjectURL(url);
-          resolve(duration);
-        }
-      };
-
-      audio.onloadedmetadata = () => {
-        const d = Math.round(audio.duration);
-        finish(isNaN(d) ? 0 : d);
-      };
-
-      audio.onerror = () => finish(0);
-
-      setTimeout(() => finish(0), 3000);
-    } catch {
-      resolve(0);
-    }
-  });
-}
-
-export function parseAudioFilename(filename: string): { title: string; artist: string } {
-  // Strip file extension
-  let base = filename.replace(/\.[^/.]+$/, '').trim();
-
-  // Remove common leading track numbers like "01. ", "01 - ", "01_", "[01] "
-  base = base.replace(/^[0-9]+[\s._\-–—]+/, '').trim();
-
-  // Remove common noisy tags
-  base = base.replace(/\s*[\(\[](official\s*(audio|video|music video)|audio|lyrics?|320\s*kbps|1080p|720p|hq|hd)[\)\]]/gi, '').trim();
-
-  // Check if " - ", " – ", or " — " exists separating Artist and Title
-  const separatorMatch = base.match(/\s+[-–—]\s+/);
-  if (separatorMatch && separatorMatch.index) {
-    const artist = base.substring(0, separatorMatch.index).trim();
-    const title = base.substring(separatorMatch.index + separatorMatch[0].length).trim();
-    if (artist && title) {
-      return {
-        artist: artist.replace(/_/g, ' '),
-        title: title.replace(/_/g, ' '),
-      };
-    }
-  }
-
-  // Fallback: title from base, clean underscores
-  const cleanTitle = base.replace(/_/g, ' ').trim() || 'Unknown Track';
-  return {
-    title: cleanTitle,
-    artist: 'Device Audio',
-  };
-}
-
-export function getCodecFromFilename(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'flac':
-      return 'FLAC (Lossless)';
-    case 'wav':
-      return 'WAV (Lossless)';
-    case 'mp3':
-      return 'MP3';
-    case 'm4a':
-      return 'AAC / M4A';
-    case 'aac':
-      return 'AAC';
-    case 'ogg':
-      return 'OGG Vorbis';
-    case 'opus':
-      return 'Opus';
-    default:
-      return ext ? ext.toUpperCase() : 'Audio';
-  }
-}
-
 export interface ScanProgress {
   current: number;
   total: number;
@@ -143,10 +66,12 @@ export function useOfflineManager() {
       const req = store.getAll();
 
       req.onsuccess = () => {
-        // Clean up previous blob URLs
+        // Clean up previous session blob URLs
         activeBlobUrlsRef.current.forEach((url) => {
           try {
-            URL.revokeObjectURL(url);
+            if (url.startsWith('blob:')) {
+              URL.revokeObjectURL(url);
+            }
           } catch {}
         });
         activeBlobUrlsRef.current = [];
@@ -160,9 +85,36 @@ export function useOfflineManager() {
             newUrls.push(blobUrl);
           }
 
+          // Cover art resolution:
+          // 1. Embedded image blob from ID3 / FLAC / M4A
+          // 2. Or generate a unique aesthetic gradient cover (NEVER force app icon!)
+          let resolvedCover = r.song?.cover_url;
+          if (r.cover_blob) {
+            const cUrl = URL.createObjectURL(r.cover_blob);
+            newUrls.push(cUrl);
+            resolvedCover = cUrl;
+          } else if (
+            !resolvedCover ||
+            resolvedCover === '/icon-512.png' ||
+            resolvedCover.includes('unsplash')
+          ) {
+            resolvedCover = generateAlbumCover(
+              r.song?.title || 'Unknown',
+              r.song?.artist?.name || 'Local Artist',
+              r.song?.album_title || 'Music'
+            );
+          }
+
           const song: Song = {
             ...r.song,
             stream_url: blobUrl || r.song?.stream_url,
+            cover_url: resolvedCover,
+            artist: {
+              ...r.song?.artist,
+              id: r.song?.artist?.id || r.id,
+              name: r.song?.artist?.name || 'Local Artist',
+              image_url: resolvedCover,
+            },
           };
 
           return {
@@ -188,14 +140,16 @@ export function useOfflineManager() {
     return () => {
       activeBlobUrlsRef.current.forEach((url) => {
         try {
-          URL.revokeObjectURL(url);
+          if (url.startsWith('blob:')) {
+            URL.revokeObjectURL(url);
+          }
         } catch {}
       });
       activeBlobUrlsRef.current = [];
     };
   }, [loadOfflineTracks]);
 
-  // Scan & import local audio files from device
+  // Scan & import audio files from device with real metadata & cover extraction
   const scanDeviceFiles = async (fileList: FileList | File[]): Promise<number> => {
     const files = Array.from(fileList).filter((f) => {
       const name = f.name.toLowerCase();
@@ -227,9 +181,8 @@ export function useOfflineManager() {
         const file = files[i];
         setScanProgress({ current: i + 1, total: files.length, currentFile: file.name });
 
-        const duration = await probeAudioDuration(file);
-        const { title, artist } = parseAudioFilename(file.name);
-        const codec = getCodecFromFilename(file.name);
+        // Extract complete metadata (ID3v2, FLAC, M4A, cover art blob, duration, etc.)
+        const meta = await extractFullAudioMetadata(file);
 
         // Generate persistent integer ID based on file timestamp and size
         const uniqueId = Math.abs(
@@ -238,19 +191,21 @@ export function useOfflineManager() {
 
         const song: Song = {
           id: uniqueId,
-          title: title,
-          duration: duration || 180,
+          title: meta.title,
+          duration: meta.duration || 180,
           audio_key: `device-${uniqueId}`,
-          cover_url: '/icon-512.png',
+          cover_url: meta.coverUrl,
           download_allowed: true,
           is_favorite: false,
           artist: {
             id: uniqueId,
-            name: artist,
-            image_url: '/icon-512.png',
+            name: meta.artist,
+            image_url: meta.coverUrl,
           },
-          album_title: 'Device Music',
-          codec: codec,
+          album_title: meta.album,
+          track_number: meta.trackNumber,
+          release_date: meta.year ? `${meta.year}-01-01` : undefined,
+          codec: meta.codec,
           bitrate: undefined,
         };
 
@@ -258,6 +213,7 @@ export function useOfflineManager() {
           id: uniqueId,
           song,
           blob: file,
+          cover_blob: meta.coverBlob,
           downloaded_at: new Date().toISOString(),
           size_bytes: file.size,
           source: 'device_scan',
@@ -284,6 +240,57 @@ export function useOfflineManager() {
       setIsScanning(false);
       setScanProgress(null);
     }
+  };
+
+  // Auto-scan device directory using File System Access API
+  const autoScanStorage = async (): Promise<number> => {
+    if ('showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await (window as any).showDirectoryPicker({
+          id: 'mymusic_device_storage',
+          mode: 'read',
+        });
+
+        const files: File[] = [];
+
+        async function scanDirectory(handle: any) {
+          for await (const entry of handle.values()) {
+            if (entry.kind === 'file') {
+              const name = entry.name.toLowerCase();
+              if (
+                name.endsWith('.mp3') ||
+                name.endsWith('.flac') ||
+                name.endsWith('.wav') ||
+                name.endsWith('.m4a') ||
+                name.endsWith('.aac') ||
+                name.endsWith('.ogg') ||
+                name.endsWith('.opus')
+              ) {
+                try {
+                  const f = await entry.getFile();
+                  files.push(f);
+                } catch {}
+              }
+            } else if (entry.kind === 'directory') {
+              try {
+                await scanDirectory(entry);
+              } catch {}
+            }
+          }
+        }
+
+        await scanDirectory(dirHandle);
+
+        if (files.length > 0) {
+          return await scanDeviceFiles(files);
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('Auto-scan directory picker canceled or error:', err);
+        }
+      }
+    }
+    return 0;
   };
 
   // Download track from current backend server
@@ -350,13 +357,29 @@ export function useOfflineManager() {
       }
 
       const blob = await res.blob();
+
+      // Fetch cover art if available
+      let coverBlob: Blob | undefined = undefined;
+      if (song.cover_url && !song.cover_url.startsWith('data:')) {
+        try {
+          const coverRes = await fetch(
+            song.cover_url.startsWith('http') ? song.cover_url : `${cleanPeer}${song.cover_url}`
+          );
+          if (coverRes.ok) {
+            coverBlob = await coverRes.blob();
+          }
+        } catch {}
+      }
+
       const db = await openOfflineDB();
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
 
-      const resolvedCover = song.cover_url?.startsWith('http')
+      const resolvedCover = coverBlob
+        ? undefined
+        : song.cover_url?.startsWith('http')
         ? song.cover_url
-        : `${cleanPeer}${song.cover_url || '/icon-512.png'}`;
+        : generateAlbumCover(song.title, song.artist?.name || 'Peer', song.album_title || 'P2P Shared');
 
       const record = {
         id: song.id,
@@ -366,6 +389,7 @@ export function useOfflineManager() {
           cover_url: resolvedCover,
         },
         blob,
+        cover_blob: coverBlob,
         downloaded_at: new Date().toISOString(),
         size_bytes: blob.size,
         source: 'peer_download',
@@ -432,6 +456,7 @@ export function useOfflineManager() {
     isScanning,
     scanProgress,
     scanDeviceFiles,
+    autoScanStorage,
     downloadForOffline,
     downloadPeerTrack,
     removeOfflineTrack,
