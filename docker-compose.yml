@@ -1,19 +1,68 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17-alpine
     container_name: mymusic-postgres
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: mymusic
       POSTGRES_USER: mymusic
       POSTGRES_PASSWORD: mymusic_dev_password
-
     ports:
       - "5432:5432"
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mymusic -d mymusic"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: mymusic-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: mymusic-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://mymusic:mymusic_dev_password@postgres:5432/mymusic
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-mymusic-super-secret-jwt-dev-key-change-in-production-2026}
+      STORAGE_PROVIDER: local
+      STORAGE_LOCAL_PATH: /app/data/storage
+      CORS_ORIGINS: '["http://localhost", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080"]'
+    ports:
+      - "8000:8000"
+    volumes:
+      - api_storage:/app/data/storage
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: mymusic-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
 
 volumes:
   postgres_data:
+  minio_data:
+  api_storage:

@@ -1,5 +1,4 @@
 from pathlib import Path
-
 from mutagen import File
 
 
@@ -27,44 +26,53 @@ def parse_year(value):
 
 def extract_artwork(audio) -> tuple[bytes | None, str | None]:
     """
-    Extract embedded album artwork from supported audio formats.
+    Extract embedded album artwork from supported audio formats (MP3, FLAC, M4A, OGG).
 
     Returns:
         (artwork_bytes, mime_type)
     """
 
-    # FLAC
+    # 1. FLAC
     pictures = getattr(audio, "pictures", None)
-
     if pictures:
         picture = pictures[0]
-
         if picture.data:
             return picture.data, picture.mime
 
-    # MP3
-    tags = audio.tags
-
+    # 2. MP3 (ID3 APIC frames)
+    tags = getattr(audio, "tags", None)
     if tags:
-        for value in tags.values():
-            if hasattr(value, "mime") and hasattr(value, "data"):
-                if value.data:
-                    return value.data, value.mime
+        for key, value in tags.items():
+            if key.startswith("APIC") or (hasattr(value, "mime") and hasattr(value, "data")):
+                if hasattr(value, "data") and value.data:
+                    mime = getattr(value, "mime", "image/jpeg") or "image/jpeg"
+                    return value.data, mime
 
-    # MP4 / M4A
+    # 3. MP4 / M4A (covr)
     if tags and "covr" in tags:
         covers = tags["covr"]
-
         if covers:
             cover = covers[0]
             data = bytes(cover)
-
             mime = "image/jpeg"
-
             if data.startswith(b"\x89PNG"):
                 mime = "image/png"
-
+            elif data.startswith(b"RIFF") and b"WEBP" in data[:16]:
+                mime = "image/webp"
             return data, mime
+
+    # 4. Ogg / Vorbis Comment (METADATA_BLOCK_PICTURE)
+    if tags and ("metadata_block_picture" in tags or "METADATA_BLOCK_PICTURE" in tags):
+        import base64
+        from mutagen.flac import Picture
+        try:
+            pic_field = tags.get("metadata_block_picture") or tags.get("METADATA_BLOCK_PICTURE")
+            if pic_field and len(pic_field) > 0:
+                pic_data = base64.b64decode(pic_field[0])
+                pic = Picture(pic_data)
+                return pic.data, pic.mime
+        except Exception:
+            pass
 
     return None, None
 
@@ -77,8 +85,8 @@ def read_metadata(file_path: Path) -> dict:
             f"Unsupported or unreadable audio file: {file_path}"
         )
 
-    tags = audio.tags
-    info = audio.info
+    tags = getattr(audio, "tags", None)
+    info = getattr(audio, "info", None)
 
     def get_tag(*keys, default=None):
         if not tags:
@@ -101,7 +109,7 @@ def read_metadata(file_path: Path) -> dict:
         "TIT2",
         "title",
         "\xa9nam",
-        default=file_path.stem,
+        default=None,
     )
 
     artist = get_tag(
@@ -148,6 +156,15 @@ def read_metadata(file_path: Path) -> dict:
         "disk",
     )
 
+    lyrics = get_tag(
+        "USLT",
+        "SYLT",
+        "lyrics",
+        "\xa9lyr",
+        "UNSYNCEDLYRICS",
+        default=None,
+    )
+
     artwork, artwork_mime = extract_artwork(audio)
 
     return {
@@ -159,13 +176,14 @@ def read_metadata(file_path: Path) -> dict:
         "year": parse_year(year),
         "track_number": parse_number(track_number),
         "disc_number": parse_number(disc_number),
+        "lyrics": lyrics,
         "duration_seconds": getattr(info, "length", None),
         "bitrate": getattr(info, "bitrate", None),
         "sample_rate": getattr(info, "sample_rate", None),
         "channels": getattr(info, "channels", None),
         "bit_depth": getattr(info, "bits_per_sample", None),
         "file_path": str(file_path),
-        "codec": audio.mime[0] if audio.mime else None,
+        "codec": getattr(audio, "mime", [None])[0] if getattr(audio, "mime", None) else None,
         "artwork": artwork,
         "artwork_mime": artwork_mime,
     }

@@ -17,5 +17,13 @@ __pycache__/
 node_modules/
 dist/
 build/
+.gradle/
+*.apk
+*.aab
 
 .DS_Store
+data/
+web/node_modules/
+server/venv/
+*.mp3
+*.wav
