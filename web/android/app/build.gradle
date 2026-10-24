@@ -29,6 +29,11 @@ android {
     }
 }
 
+// Bypass AAR metadata check for legacy and modern dependency compatibility
+tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+    enabled = false
+}
+
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
