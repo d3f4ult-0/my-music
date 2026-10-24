@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useOfflineManager } from '../../hooks/useOfflineManager';
+import { useOfflineManager, getOfflineTrackBlob } from '../../hooks/useOfflineManager';
 import { apiRequest, resolveAssetUrl } from '../../api/client';
 
 function formatTime(seconds: number): string {
@@ -92,9 +92,43 @@ export const GlobalAudioPlayer: React.FC = () => {
   }, [volume, isMuted]);
 
   // Audio stream URL resolution (supports remote peer stream, offline blob or local stream)
-  const streamUrl = currentTrack
-    ? resolveAssetUrl(currentTrack.stream_url || `/api/v1/songs/${currentTrack.id}/stream`)
-    : undefined;
+  const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let activeBlobUrl: string | null = null;
+    let isCancelled = false;
+
+    if (!currentTrack) {
+      setResolvedStreamUrl(undefined);
+      return;
+    }
+
+    // 1. Direct stream URL (e.g. device blob: URL or remote peer HTTP URL)
+    if (currentTrack.stream_url) {
+      setResolvedStreamUrl(resolveAssetUrl(currentTrack.stream_url));
+      return;
+    }
+
+    // 2. Check offline IndexedDB cache
+    getOfflineTrackBlob(currentTrack.id).then((blob) => {
+      if (isCancelled) return;
+      if (blob) {
+        activeBlobUrl = URL.createObjectURL(blob);
+        setResolvedStreamUrl(activeBlobUrl);
+      } else {
+        setResolvedStreamUrl(resolveAssetUrl(`/api/v1/songs/${currentTrack.id}/stream`));
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+      if (activeBlobUrl) {
+        try {
+          URL.revokeObjectURL(activeBlobUrl);
+        } catch {}
+      }
+    };
+  }, [currentTrack?.id, currentTrack?.stream_url]);
 
   // Handle track change
   useEffect(() => {
@@ -212,7 +246,7 @@ export const GlobalAudioPlayer: React.FC = () => {
     <>
       <audio
         ref={audioRef}
-        src={streamUrl}
+        src={resolvedStreamUrl}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
         onWaiting={() => setLoading(true)}

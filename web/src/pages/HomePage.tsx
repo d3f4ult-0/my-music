@@ -1,94 +1,40 @@
-import React, { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Sparkles, Disc, Flame, Radio } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
+import {
+  Sparkles,
+  Disc,
+  Flame,
+  Radio,
+  Music,
+  FolderPlus,
+  Play,
+  Pause,
+  BookOpen,
+  WifiOff,
+  CheckCircle,
+  FileAudio,
+} from 'lucide-react';
 import { HomeFeed, Song } from '../types';
 import { apiRequest, resolveAssetUrl } from '../api/client';
 import { SongRow } from '../components/common/SongRow';
 import { AlbumCard } from '../components/common/AlbumCard';
 import { ArtistCard } from '../components/common/ArtistCard';
 import { usePlayerStore } from '../stores/playerStore';
-
-const DEMO_FEED: HomeFeed = {
-  greeting: 'Welcome to MyMusic',
-  recently_played: [
-    {
-      id: 991,
-      title: 'Neon Odyssey',
-      artist: { id: 991, name: 'Synthetica', image_url: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&auto=format&fit=crop&q=80' },
-      album_title: 'Future Nights',
-      duration: 184,
-      audio_key: 'demo-1',
-      stream_url: 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3',
-      cover_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80',
-      is_favorite: true,
-      download_allowed: true,
-    },
-    {
-      id: 992,
-      title: 'Midnight Echoes',
-      artist: { id: 992, name: 'Solar Drift', image_url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80' },
-      album_title: 'Celestial Dream',
-      duration: 215,
-      audio_key: 'demo-2',
-      stream_url: 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3',
-      cover_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=80',
-      is_favorite: false,
-      download_allowed: true,
-    },
-    {
-      id: 993,
-      title: 'Lepidoptera Wings',
-      artist: { id: 993, name: 'Cosmic Beats', image_url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&auto=format&fit=crop&q=80' },
-      album_title: 'Deep Horizon',
-      duration: 168,
-      audio_key: 'demo-3',
-      stream_url: 'https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg',
-      cover_url: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=500&auto=format&fit=crop&q=80',
-      is_favorite: true,
-      download_allowed: true,
-    },
-  ],
-  favorites: [],
-  new_releases: [
-    {
-      id: 991,
-      title: 'Future Nights',
-      artist_id: 991,
-      artist_name: 'Synthetica',
-      cover_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80',
-      track_count: 8,
-      year: 2026,
-    },
-    {
-      id: 992,
-      title: 'Celestial Dream',
-      artist_id: 992,
-      artist_name: 'Solar Drift',
-      cover_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=80',
-      track_count: 6,
-      year: 2026,
-    },
-  ],
-  popular_songs: [],
-  featured_artists: [
-    {
-      id: 991,
-      name: 'Synthetica',
-      image_url: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&auto=format&fit=crop&q=80',
-    },
-    {
-      id: 992,
-      name: 'Solar Drift',
-      image_url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80',
-    },
-  ],
-};
+import { useOfflineManager } from '../hooks/useOfflineManager';
+import { P2PUserManualModal } from '../components/p2p/P2PUserManualModal';
 
 export const HomePage: React.FC = () => {
+  const navigate = useNavigate();
   const [feed, setFeed] = useState<HomeFeed | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { playTrack } = usePlayerStore();
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayerStore();
+  const { offlineTracks, isScanning, scanProgress, scanDeviceFiles } = useOfflineManager();
+
   const { onAddToPlaylist, onReport } = useOutletContext<{
     onAddToPlaylist: (song: Song) => void;
     onReport: (song: Song) => void;
@@ -98,60 +44,273 @@ export const HomePage: React.FC = () => {
     apiRequest<HomeFeed>('/home')
       .then((data) => {
         setFeed(data);
-        setIsDemoMode(false);
       })
       .catch((err) => {
-        console.warn('Could not load remote home feed, activating live demo:', err);
-        setFeed(DEMO_FEED);
-        setIsDemoMode(true);
+        console.warn('Could not load remote home feed, defaulting to local player mode:', err);
+        setFeed({
+          greeting: 'Welcome to MyMusic',
+          recently_played: [],
+          favorites: [],
+          new_releases: [],
+          popular_songs: [],
+          featured_artists: [],
+        });
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const handleDeviceFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setScanMessage('Scanning & importing songs from your device...');
+      const count = await scanDeviceFiles(files);
+      setScanMessage(`Successfully imported ${count} song${count === 1 ? '' : 's'}!`);
+      setTimeout(() => setScanMessage(null), 4000);
+    } catch (err: any) {
+      alert(`Could not import audio files: ${err.message}`);
+      setScanMessage(null);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const offlineSongs = offlineTracks.map((t) => t.song);
+
+  const handlePlayDeviceTrack = (index: number) => {
+    const song = offlineSongs[index];
+    if (!song) return;
+
+    if (currentTrack?.id === song.id) {
+      togglePlay();
+    } else {
+      playTrack(song, offlineSongs, index);
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-neutral-500 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span>Curating your home feed...</span>
+          <span>Curating your music space...</span>
         </div>
       </div>
     );
   }
 
-  const currentFeed = feed || DEMO_FEED;
+  const currentFeed = feed || {
+    greeting: 'Welcome to MyMusic',
+    recently_played: [],
+    favorites: [],
+    new_releases: [],
+    popular_songs: [],
+    featured_artists: [],
+  };
 
   return (
-    <div className="space-y-10 max-w-7xl mx-auto">
-      {/* Demo / Web Mode Notice */}
-      {isDemoMode && (
-        <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-primary/10 via-neutral-900 to-neutral-900 border border-primary/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5 text-neutral-200">
-            <Radio size={16} className="text-primary flex-shrink-0 animate-pulse" />
-            <span>
-              <strong>GitHub Pages Live Preview:</strong> Playing sample tracks. Connect to your private server or LAN peer to stream your own library.
-            </span>
-          </div>
-          <span className="text-[11px] text-primary font-mono bg-primary/10 px-2 py-1 rounded border border-primary/20">
-            Live Preview Mode
-          </span>
-        </div>
-      )}
+    <div className="space-y-8 max-w-7xl mx-auto pb-10">
+      {/* Hidden file input for 1-tap device song scan */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleDeviceFiles}
+        multiple
+        accept="audio/*,.mp3,.flac,.wav,.m4a,.aac,.ogg,.opus,.wma"
+        className="hidden"
+      />
 
-      {/* Dynamic Greeting Banner */}
+      {/* Greeting Banner */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-2">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-1.5">
           {currentFeed.greeting}
         </h1>
         <p className="text-xs md:text-sm text-neutral-400">
-          Discover certified independent music and authorized master recordings.
+          Lossless music player, local storage scanner, and P2P Wi-Fi sharing.
         </p>
       </div>
 
-      {/* Recently Played (if available) */}
+      {/* Device Music & P2P Quick Actions Hero Card */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Card 1: Device Storage Scanner */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-neutral-900 to-[#181818] border border-border-subtle shadow-sm flex flex-col justify-between space-y-4">
+          <div className="space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary border border-primary/30 flex items-center justify-center">
+              <Music size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-base">Your Downloaded Music</h3>
+              <p className="text-xs text-neutral-400 mt-0.5 leading-relaxed">
+                Scan MP3, FLAC, or WAV songs stored in your phone's Downloads or Music folder. Play offline anytime with zero internet.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isScanning}
+              className="px-4 py-2 bg-primary text-black font-bold text-xs rounded-xl hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md shadow-primary/20"
+            >
+              <Music size={14} />
+              <span>Scan / Pick Songs</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/offline')}
+              className="px-3.5 py-2 bg-surface hover:bg-surface-hover text-white border border-border-subtle rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <WifiOff size={14} className="text-primary" />
+              <span>View Library ({offlineTracks.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 2: P2P Network & User Manual */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-950/30 to-[#181818] border border-blue-500/25 shadow-sm flex flex-col justify-between space-y-4">
+          <div className="space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+              <Radio size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-base">P2P Wi-Fi & Hotspot Sharing</h3>
+              <p className="text-xs text-neutral-400 mt-0.5 leading-relaxed">
+                Stream lossless music directly between devices on the same Wi-Fi or phone hotspot. No accounts, no data usage.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={() => navigate('/peers')}
+              className="px-4 py-2 bg-blue-500 text-white font-bold text-xs rounded-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-blue-500/20"
+            >
+              <Radio size={14} />
+              <span>Connect to Peers</span>
+            </button>
+
+            <button
+              onClick={() => setShowManualModal(true)}
+              className="px-3.5 py-2 bg-surface hover:bg-surface-hover text-white border border-border-subtle rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <BookOpen size={14} className="text-blue-400" />
+              <span>User Manual</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Scanning Progress Feedback */}
+      {isScanning && scanProgress && (
+        <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 space-y-2 animate-pulse">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-primary flex items-center gap-2">
+              <FileAudio size={16} className="animate-spin" />
+              Scanning device songs ({scanProgress.current} / {scanProgress.total})...
+            </span>
+            <span className="text-neutral-400 font-mono text-[11px]">
+              {Math.round((scanProgress.current / scanProgress.total) * 100)}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-150"
+              style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-neutral-400 truncate font-mono">
+            {scanProgress.currentFile}
+          </p>
+        </div>
+      )}
+
+      {/* Success Notification */}
+      {scanMessage && (
+        <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle size={15} />
+          <span>{scanMessage}</span>
+        </div>
+      )}
+
+      {/* Device Music Section (shown if user has scanned tracks) */}
+      {offlineTracks.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+              <Music size={20} className="text-primary" /> Your Device Music ({offlineTracks.length})
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => playTrack(offlineSongs[0], offlineSongs, 0)}
+                className="px-3 py-1.5 rounded-lg bg-primary text-black text-xs font-bold flex items-center gap-1.5 hover:scale-105 transition-all"
+              >
+                <Play size={13} className="fill-current" /> Play All
+              </button>
+              <button
+                onClick={() => navigate('/offline')}
+                className="text-xs text-neutral-400 hover:text-white"
+              >
+                See All
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {offlineTracks.slice(0, 6).map((item, idx) => {
+              const isCurrent = currentTrack?.id === item.song.id;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => handlePlayDeviceTrack(idx)}
+                  className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer group ${
+                    isCurrent
+                      ? 'bg-surface-active/80 border-primary/40'
+                      : 'bg-surface-card hover:bg-surface-hover border-border-subtle'
+                  }`}
+                >
+                  <div className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-neutral-900 border border-neutral-800">
+                    <img
+                      src={resolveAssetUrl(item.song.cover_url) || '/icon-512.png'}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                    <div
+                      className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
+                        isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
+                    >
+                      {isCurrent && isPlaying ? (
+                        <Pause size={14} className="fill-primary text-primary" />
+                      ) : (
+                        <Play size={14} className="fill-white text-white ml-0.5" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={`text-xs sm:text-sm font-semibold truncate transition-colors ${
+                        isCurrent ? 'text-primary' : 'text-neutral-100 group-hover:text-primary'
+                      }`}
+                    >
+                      {item.song.title}
+                    </div>
+                    <div className="text-[11px] text-neutral-400 truncate mt-0.5">
+                      {item.song.artist?.name || 'Device Audio'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Recently Played */}
       {currentFeed.recently_played.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
             <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
               Recently Played
             </h2>
@@ -164,7 +323,7 @@ export const HomePage: React.FC = () => {
                 className="flex items-center gap-3 p-2 rounded-lg bg-surface-card hover:bg-surface-hover transition-colors cursor-pointer border border-border-subtle group"
               >
                 <img
-                  src={resolveAssetUrl(song.cover_url) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80'}
+                  src={resolveAssetUrl(song.cover_url) || '/icon-512.png'}
                   alt=""
                   className="w-12 h-12 rounded object-cover flex-shrink-0"
                 />
@@ -184,8 +343,8 @@ export const HomePage: React.FC = () => {
 
       {/* New Releases (Albums) */}
       {currentFeed.new_releases.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
             <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
               <Sparkles size={20} className="text-primary" /> New Releases
             </h2>
@@ -200,8 +359,8 @@ export const HomePage: React.FC = () => {
 
       {/* Popular Tracks */}
       {currentFeed.popular_songs.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
             <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
               <Flame size={20} className="text-amber-400" /> Popular Tracks
             </h2>
@@ -223,8 +382,8 @@ export const HomePage: React.FC = () => {
 
       {/* Featured Artists */}
       {currentFeed.featured_artists.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
             <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
               <Disc size={20} className="text-primary" /> Featured Artists
             </h2>
@@ -236,6 +395,12 @@ export const HomePage: React.FC = () => {
           </div>
         </section>
       )}
+
+      {/* P2P User Manual Modal */}
+      <P2PUserManualModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+      />
     </div>
   );
 };

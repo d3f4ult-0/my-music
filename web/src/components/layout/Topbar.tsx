@@ -38,9 +38,6 @@ export const Topbar: React.FC = () => {
       })
       .catch(() => {
         setIsOnline(false);
-        if (isCapacitorApp() && !getServerUrl()) {
-          setShowServerModal(true);
-        }
       });
   };
 
