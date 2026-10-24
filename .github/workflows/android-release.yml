@@ -65,14 +65,24 @@ jobs:
           mkdir -p build-artifacts
           if [ -f "./web/android/app/build/outputs/apk/release/app-release.apk" ]; then
             cp ./web/android/app/build/outputs/apk/release/app-release.apk build-artifacts/MyMusic-release.apk
+            cp ./web/android/app/build/outputs/apk/release/app-release.apk build-artifacts/MyMusic-Player.apk
           elif [ -f "./web/android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
             cp ./web/android/app/build/outputs/apk/release/app-release-unsigned.apk build-artifacts/MyMusic-release.apk
           fi
           if [ -f "./web/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
             cp ./web/android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/MyMusic-debug.apk
-            cp ./web/android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/MyMusic-Player.apk
+            if [ ! -f "build-artifacts/MyMusic-Player.apk" ]; then
+              cp ./web/android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/MyMusic-Player.apk
+            fi
           fi
           ls -lh build-artifacts/
+
+      - name: Verify APK Signatures
+        run: |
+          for apk in build-artifacts/*.apk; do
+            echo "=== Verifying signature for $apk ==="
+            $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose "$apk" || true
+          done
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
@@ -84,23 +94,22 @@ jobs:
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.0' }}
-          name: MyMusic Player v1.0.0
+          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.1' }}
+          name: MyMusic Player v1.0.1
           draft: false
           prerelease: false
           body: |
-            ### 🎵 MyMusic Player Android Release
+            ### 🎵 MyMusic Player Android Release (v1.0.1)
             
-            - **Spicy Lyrics Engine**: Real-time synced line highlighting with LRCLIB auto-search.
-            - **Ambient Rotating Vinyl**: 40s GPU-accelerated rotating cover art with dynamic dominant color blending.
-            - **Direct LAN & P2P Streaming**: Stream lossless audio from your PC or local peers without registration walls.
-            - **Background Audio & Media Notification**: Native lockscreen and notification drawer playback controls.
-            - **Direct Install**: Pre-signed for seamless installation on any Android phone (Android 6.0+).
+            - **Universal Dual-Signing (V1 + V2 Scheme)**: Verified installable on any Android phone (Samsung, Xiaomi, Pixel, OnePlus, Oppo, Vivo, Motorola).
+            - **Device Music Scanner**: Scan downloaded MP3, FLAC, WAV, and AAC tracks directly from phone storage for 100% offline playback.
+            - **Interactive P2P User Manual**: Complete guide for Wi-Fi and Mobile Hotspot music sharing with 0 MB data usage.
+            - **Spicy Synced Lyrics & Rotating Vinyl**: Ambient cover art with real-time lyrics synchronization.
             
-            #### 📦 Download
-            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-Player.apk)** (⭐ Recommended: 1-click install)
-            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-debug.apk)**
-            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.0/MyMusic-release.apk)**
+            #### 📦 Download APKs
+            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.1/MyMusic-Player.apk)** (⭐ Recommended: 1-click install)
+            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.1/MyMusic-release.apk)**
+            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.1/MyMusic-debug.apk)**
           files: build-artifacts/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

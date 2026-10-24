@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-sdk tools:overrideLibrary="org.apache.cordova" />
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" tools:overrideLibrary="org.apache.cordova" />
 
     <application
         android:allowBackup="true"
