@@ -29,6 +29,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { resolveAssetUrl } from '../api/client';
 import { P2PUserManualModal } from '../components/p2p/P2PUserManualModal';
 import { Song, OfflineTrack } from '../types';
+import { LyricsEditorModal } from '../components/lyrics/LyricsEditorModal';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -87,6 +88,7 @@ export const OfflinePage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'title' | 'artist' | 'album' | 'duration' | 'size' | 'date'>('date');
   const [showManualModal, setShowManualModal] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [lyricsModalSong, setLyricsModalSong] = useState<Song | null>(null);
 
   const totalBytes = offlineTracks.reduce((acc, t) => acc + (t.size_bytes || 0), 0);
 
@@ -595,10 +597,17 @@ export const OfflinePage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-neutral-400 font-mono">
                       {formatDuration(item.song.duration)}
                     </span>
+                    <button
+                      onClick={() => setLyricsModalSong(item.song)}
+                      className="p-1.5 text-neutral-400 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+                      title="View or add lyrics"
+                    >
+                      <Mic2 size={15} />
+                    </button>
                     <button
                       onClick={() => addToQueue(item.song)}
                       className="p-1.5 text-neutral-400 hover:text-white hover:bg-surface rounded-lg transition-colors"
@@ -698,10 +707,17 @@ export const OfflinePage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <span className="text-xs text-neutral-400 font-mono">
                       {formatDuration(item.song.duration)}
                     </span>
+                    <button
+                      onClick={() => setLyricsModalSong(item.song)}
+                      className="p-1.5 text-neutral-400 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+                      title="View or add lyrics"
+                    >
+                      <Mic2 size={15} />
+                    </button>
                     <button
                       onClick={() => addToQueue(item.song)}
                       className="p-1.5 text-neutral-400 hover:text-white hover:bg-surface rounded-lg transition-colors"
@@ -820,10 +836,18 @@ export const OfflinePage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-4 pl-2">
+                    <div className="flex items-center gap-1.5 sm:gap-3 pl-2">
                       <span className="text-xs text-neutral-400 font-mono hidden sm:inline">
                         {formatDuration(item.song.duration)}
                       </span>
+
+                      <button
+                        onClick={() => setLyricsModalSong(item.song)}
+                        className="p-1.5 text-neutral-400 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+                        title="View or add lyrics"
+                      >
+                        <Mic2 size={15} />
+                      </button>
 
                       <button
                         onClick={() => addToQueue(item.song)}
@@ -946,6 +970,16 @@ export const OfflinePage: React.FC = () => {
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
       />
+
+      {/* Lyrics Editor Modal */}
+      {lyricsModalSong && (
+        <LyricsEditorModal
+          isOpen={!!lyricsModalSong}
+          song={lyricsModalSong}
+          onClose={() => setLyricsModalSong(null)}
+          onSave={() => {}}
+        />
+      )}
     </div>
   );
 };

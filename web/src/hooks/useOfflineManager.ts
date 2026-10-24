@@ -9,8 +9,12 @@ import {
 } from '../utils/audioMetadataExtractor';
 
 const DB_NAME = 'mymusic_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'offline_tracks';
+const LYRICS_STORE_NAME = 'offline_lyrics';
+
+// Global cache for cover image URLs to avoid recreating & prevent premature revoking
+const globalCoverCache = new Map<number, string>();
 
 export function openOfflineDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -19,6 +23,9 @@ export function openOfflineDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(LYRICS_STORE_NAME)) {
+        db.createObjectStore(LYRICS_STORE_NAME, { keyPath: 'song_id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -55,9 +62,6 @@ export function useOfflineManager() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
 
-  // Track active blob URLs to clean up and prevent memory leaks
-  const activeBlobUrlsRef = useRef<string[]>([]);
-
   const loadOfflineTracks = useCallback(async () => {
     try {
       const db = await openOfflineDB();
@@ -66,33 +70,20 @@ export function useOfflineManager() {
       const req = store.getAll();
 
       req.onsuccess = () => {
-        // Clean up previous session blob URLs
-        activeBlobUrlsRef.current.forEach((url) => {
-          try {
-            if (url.startsWith('blob:')) {
-              URL.revokeObjectURL(url);
-            }
-          } catch {}
-        });
-        activeBlobUrlsRef.current = [];
-
         const records: any[] = req.result || [];
-        const newUrls: string[] = [];
 
         const mapped: OfflineTrack[] = records.map((r) => {
-          const blobUrl = r.blob ? URL.createObjectURL(r.blob) : undefined;
-          if (blobUrl) {
-            newUrls.push(blobUrl);
-          }
-
           // Cover art resolution:
-          // 1. Embedded image blob from ID3 / FLAC / M4A
-          // 2. Or generate a unique aesthetic gradient cover (NEVER force app icon!)
+          // 1. Embedded image blob from ID3 / FLAC / M4A (cached stably in globalCoverCache)
+          // 2. Or generate a unique aesthetic gradient cover
           let resolvedCover = r.song?.cover_url;
           if (r.cover_blob) {
-            const cUrl = URL.createObjectURL(r.cover_blob);
-            newUrls.push(cUrl);
-            resolvedCover = cUrl;
+            let cached = globalCoverCache.get(r.id);
+            if (!cached) {
+              cached = URL.createObjectURL(r.cover_blob);
+              globalCoverCache.set(r.id, cached);
+            }
+            resolvedCover = cached;
           } else if (
             !resolvedCover ||
             resolvedCover === '/icon-512.png' ||
@@ -107,7 +98,9 @@ export function useOfflineManager() {
 
           const song: Song = {
             ...r.song,
-            stream_url: blobUrl || r.song?.stream_url,
+            // Stream URL: keep external/peer URLs if present, otherwise GlobalAudioPlayer
+            // resolves it safely from IndexedDB via getOfflineTrackBlob
+            stream_url: r.song?.stream_url && r.song.stream_url.startsWith('http') ? r.song.stream_url : undefined,
             cover_url: resolvedCover,
             artist: {
               ...r.song?.artist,
@@ -121,12 +114,11 @@ export function useOfflineManager() {
             id: r.id,
             song,
             downloaded_at: r.downloaded_at,
-            blob_url: blobUrl,
+            blob_url: undefined,
             size_bytes: r.size_bytes || (r.blob ? r.blob.size : 0),
           };
         });
 
-        activeBlobUrlsRef.current = newUrls;
         setOfflineTracks(mapped);
       };
     } catch (err) {
@@ -136,17 +128,6 @@ export function useOfflineManager() {
 
   useEffect(() => {
     loadOfflineTracks();
-
-    return () => {
-      activeBlobUrlsRef.current.forEach((url) => {
-        try {
-          if (url.startsWith('blob:')) {
-            URL.revokeObjectURL(url);
-          }
-        } catch {}
-      });
-      activeBlobUrlsRef.current = [];
-    };
   }, [loadOfflineTracks]);
 
   // Scan & import audio files from device with real metadata & cover extraction
@@ -415,6 +396,14 @@ export function useOfflineManager() {
 
   const removeOfflineTrack = async (songId: number) => {
     try {
+      const cached = globalCoverCache.get(songId);
+      if (cached && cached.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(cached);
+        } catch {}
+        globalCoverCache.delete(songId);
+      }
+
       const db = await openOfflineDB();
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);

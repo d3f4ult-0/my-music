@@ -15,11 +15,15 @@ import {
   AlertCircle,
   Mic2,
   Maximize2,
+  Sliders,
 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useOfflineManager, getOfflineTrackBlob } from '../../hooks/useOfflineManager';
 import { apiRequest, resolveAssetUrl } from '../../api/client';
+import { MobileFullPlayerModal } from './MobileFullPlayerModal';
+import { EqualizerModal } from './EqualizerModal';
+import { equalizerService } from '../../services/equalizerService';
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
@@ -31,6 +35,7 @@ function formatTime(seconds: number): string {
 export const GlobalAudioPlayer: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressReportedRef = useRef(false);
+  const activeBlobUrlRef = useRef<string | null>(null);
 
   const {
     currentTrack,
@@ -63,6 +68,16 @@ export const GlobalAudioPlayer: React.FC = () => {
   const { downloadForOffline, isDownloaded, isDownloading } = useOfflineManager();
 
   const [hasError, setHasError] = useState(false);
+  const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string | undefined>(undefined);
+  const [isMobileFullPlayerOpen, setIsMobileFullPlayerOpen] = useState(false);
+  const [isDesktopEqOpen, setIsDesktopEqOpen] = useState(false);
+
+  // Connect Web Audio Equalizer once audio element is mounted
+  useEffect(() => {
+    if (audioRef.current) {
+      equalizerService.connectAudio(audioRef.current);
+    }
+  }, []);
 
   // Synchronize audio element playback
   useEffect(() => {
@@ -70,6 +85,7 @@ export const GlobalAudioPlayer: React.FC = () => {
     if (!audio) return;
 
     if (isPlaying) {
+      equalizerService.ensureContextRunning();
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
@@ -91,11 +107,8 @@ export const GlobalAudioPlayer: React.FC = () => {
     }
   }, [volume, isMuted]);
 
-  // Audio stream URL resolution (supports remote peer stream, offline blob or local stream)
-  const [resolvedStreamUrl, setResolvedStreamUrl] = useState<string | undefined>(undefined);
-
+  // Audio stream URL resolution (isolated stable blob URL lifecycle)
   useEffect(() => {
-    let activeBlobUrl: string | null = null;
     let isCancelled = false;
 
     if (!currentTrack) {
@@ -103,18 +116,33 @@ export const GlobalAudioPlayer: React.FC = () => {
       return;
     }
 
-    // 1. Direct stream URL (e.g. device blob: URL or remote peer HTTP URL)
-    if (currentTrack.stream_url) {
+    // 1. Direct stream URL (remote HTTP, peer stream, or data: URL)
+    if (
+      currentTrack.stream_url &&
+      (currentTrack.stream_url.startsWith('http') || currentTrack.stream_url.startsWith('data:'))
+    ) {
+      if (activeBlobUrlRef.current) {
+        try {
+          URL.revokeObjectURL(activeBlobUrlRef.current);
+        } catch {}
+        activeBlobUrlRef.current = null;
+      }
       setResolvedStreamUrl(resolveAssetUrl(currentTrack.stream_url));
       return;
     }
 
-    // 2. Check offline IndexedDB cache
+    // 2. Fetch offline track blob from IndexedDB
     getOfflineTrackBlob(currentTrack.id).then((blob) => {
       if (isCancelled) return;
       if (blob) {
-        activeBlobUrl = URL.createObjectURL(blob);
-        setResolvedStreamUrl(activeBlobUrl);
+        const newBlobUrl = URL.createObjectURL(blob);
+        if (activeBlobUrlRef.current && activeBlobUrlRef.current !== newBlobUrl) {
+          try {
+            URL.revokeObjectURL(activeBlobUrlRef.current);
+          } catch {}
+        }
+        activeBlobUrlRef.current = newBlobUrl;
+        setResolvedStreamUrl(newBlobUrl);
       } else {
         setResolvedStreamUrl(resolveAssetUrl(`/api/v1/songs/${currentTrack.id}/stream`));
       }
@@ -122,13 +150,19 @@ export const GlobalAudioPlayer: React.FC = () => {
 
     return () => {
       isCancelled = true;
-      if (activeBlobUrl) {
+    };
+  }, [currentTrack?.id]);
+
+  // Cleanup blob URL only when whole player unmounts
+  useEffect(() => {
+    return () => {
+      if (activeBlobUrlRef.current) {
         try {
-          URL.revokeObjectURL(activeBlobUrl);
+          URL.revokeObjectURL(activeBlobUrlRef.current);
         } catch {}
       }
     };
-  }, [currentTrack?.id, currentTrack?.stream_url]);
+  }, []);
 
   // Handle track change
   useEffect(() => {
@@ -146,7 +180,9 @@ export const GlobalAudioPlayer: React.FC = () => {
           album: currentTrack.album_title || 'Single',
           artwork: [
             {
-              src: resolveAssetUrl(currentTrack.cover_url) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80',
+              src:
+                resolveAssetUrl(currentTrack.cover_url) ||
+                'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80',
               sizes: '512x512',
               type: 'image/jpeg',
             },
@@ -227,11 +263,10 @@ export const GlobalAudioPlayer: React.FC = () => {
     }
   };
 
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTime = parseFloat(e.target.value);
-    seek(newTime);
+  const handleSeekChange = (newSeconds: number) => {
+    seek(newSeconds);
     if (audioRef.current) {
-      audioRef.current.currentTime = newTime;
+      audioRef.current.currentTime = newSeconds;
     }
   };
 
@@ -258,10 +293,10 @@ export const GlobalAudioPlayer: React.FC = () => {
         preload="metadata"
       />
 
-      {/* MOBILE MINI-PLAYER (Android phone layout) */}
+      {/* MOBILE MINI-PLAYER (Android phone layout, above bottom nav) */}
       <div
         className="md:hidden fixed bottom-14 left-2 right-2 h-14 bg-[#18191c]/95 border border-border-subtle rounded-xl z-40 px-3 flex items-center justify-between shadow-2xl backdrop-blur-md select-none overflow-hidden cursor-pointer"
-        onClick={toggleFullscreenLyrics}
+        onClick={() => setIsMobileFullPlayerOpen(true)}
       >
         {/* Bottom hairline progress bar */}
         <div
@@ -293,6 +328,7 @@ export const GlobalAudioPlayer: React.FC = () => {
           <button
             onClick={() => toggleTrackFavorite(currentTrack.id)}
             className="p-1.5 text-neutral-400 hover:text-white"
+            title="Favorite"
           >
             <Heart size={18} className={currentTrack.is_favorite ? 'fill-primary text-primary' : ''} />
           </button>
@@ -300,11 +336,27 @@ export const GlobalAudioPlayer: React.FC = () => {
           <button
             onClick={togglePlay}
             className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow"
+            title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? <Pause size={18} className="fill-current" /> : <Play size={18} className="fill-current ml-0.5" />}
           </button>
+
+          <button
+            onClick={next}
+            className="p-1.5 text-neutral-400 hover:text-white active:scale-90"
+            title="Next Track"
+          >
+            <SkipForward size={18} />
+          </button>
         </div>
       </div>
+
+      {/* MOBILE FULL-SCREEN PLAYER MODAL (Spotify-like slide up sheet) */}
+      <MobileFullPlayerModal
+        isOpen={isMobileFullPlayerOpen}
+        onClose={() => setIsMobileFullPlayerOpen(false)}
+        onSeek={handleSeekChange}
+      />
 
       {/* DESKTOP PERSISTENT PLAYER (Desktop/Tablet layout) */}
       <footer className="hidden md:flex fixed bottom-0 left-0 right-0 h-20 md:h-24 bg-surface border-t border-border-subtle z-50 px-4 md:px-6 items-center justify-between shadow-2xl select-none">
@@ -427,7 +479,7 @@ export const GlobalAudioPlayer: React.FC = () => {
                 max={duration || 100}
                 step={0.5}
                 value={currentTime}
-                onChange={handleSeekChange}
+                onChange={(e) => handleSeekChange(parseFloat(e.target.value))}
                 className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-primary group-hover:h-1.5 transition-all"
               />
             </div>
@@ -435,8 +487,19 @@ export const GlobalAudioPlayer: React.FC = () => {
           </div>
         </div>
 
-        {/* Volume & Queue & Spicy Lyrics (Right) */}
+        {/* Volume & Equalizer & Queue & Spicy Lyrics (Right) */}
         <div className="flex items-center justify-end gap-2.5 w-1/4 min-w-[180px]">
+          {/* Equalizer Toggle */}
+          <button
+            onClick={() => setIsDesktopEqOpen(true)}
+            className={`p-2 rounded-full transition-colors ${
+              isDesktopEqOpen ? 'text-primary bg-surface-hover' : 'text-neutral-400 hover:text-white'
+            }`}
+            title="Audio Equalizer"
+          >
+            <Sliders size={18} />
+          </button>
+
           {/* Spicy Lyrics Toggle */}
           <button
             onClick={toggleLyrics}
@@ -489,6 +552,9 @@ export const GlobalAudioPlayer: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Desktop Equalizer Modal */}
+      <EqualizerModal isOpen={isDesktopEqOpen} onClose={() => setIsDesktopEqOpen(false)} />
     </>
   );
 };

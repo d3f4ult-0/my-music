@@ -107,27 +107,37 @@ jobs:
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.3' }}
-          name: MyMusic Player v1.0.3 (ID3 Cover Art & Sectional Library Edition)
+          tag_name: ${{ github.event.inputs.release_tag || 'v1.0.4' }}
+          name: MyMusic Player v1.0.4 (Full Music Controls, Equalizer & Synced Lyrics Edition)
           draft: false
           prerelease: false
           body: |
-            ### 🎵 MyMusic Player Android Release (v1.0.3)
+            ### 🎵 MyMusic Player Android Release (v1.0.4)
             
-            - **Real ID3 Cover Art Extraction**: Automatically extracts embedded album art from MP3, FLAC, and M4A files instead of using the app icon.
-            - **Distinct Aesthetic SVG Covers**: Songs without embedded art generate unique modern album gradient covers.
-            - **Sectional Library (Tracks, Albums, Artists)**:
-              - 🎵 **Tracks**: Complete searchable tracklist with sorting by date, duration, size, title, artist, and album.
-              - 💿 **Albums**: Beautiful album grid with drilldown album tracklists and 1-tap album playback.
-              - 🎤 **Artists**: Artist views with artist albums and song lists.
-            - **⚡ Auto-Scan Storage**: Automatically scans device storage with 1-tap.
-            - **Full 45-50 MB Standalone Package**: Bundled with native Android Media3 audio engine and offline audio banks.
-            - **Dual V1 + V2 Scheme Signing**: Installs smoothly on all Android versions.
+            - **🎧 Full-Screen Mobile Music Player**:
+              - Spotify-like full-screen player that slides up when tapping the mini-player bar.
+              - **Complete Music Controls**: Interactive timeline scrubber, Shuffle toggle, Previous track, Big Play/Pause, Next track, and 3-state Repeat mode (`off`, `all`, `one`).
+              - Quick skip buttons directly on the mini-player above the navigation bar.
+            - **🎛️ Built-in 5-Band Equalizer & Bass Booster**:
+              - Web Audio API 5-Band Equalizer (60Hz, 230Hz, 910Hz, 3.6kHz, 14kHz) with range from -12dB to +12dB.
+              - Deep Bass Boost slider (0 to +12dB) for immersive punch.
+              - Audiophile presets: Flat, Bass Boost, Rock, Pop, Electronic, Hip-Hop, Acoustic, Classical, and Vocal.
+              - Accessible with 1 tap from both mobile full-player and desktop player bar.
+            - **🎤 Add & Search Synced Lyrics**:
+              - 1-Click **Auto-Search LRCLIB**: Automatically finds real synchronized LRC lyrics for your songs from the public LRCLIB repository.
+              - **Paste & Edit Lyrics**: Paste LRC or plain text lyrics, or import `.lrc` / `.txt` files from your device.
+              - **Permanent Offline Persistence**: Lyrics are saved directly to IndexedDB so they load offline forever.
+              - Real-time karaoke synchronized line highlighting with tap-to-seek support.
+            - **🛡️ Fixed Random Audio Cutoff**:
+              - Centralized, stable audio stream lifecycle prevents browser garbage collection or unmount revocation while songs are playing.
+            - **⚡ Standalone 45-50 MB App**:
+              - Bundled Media3 audio engine and offline audio banks.
+              - Dual V1 + V2 Scheme Signing with permanent keystore for flawless installation.
             
             #### 📦 Download APKs
-            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.3/MyMusic-Player.apk)** (⭐ Recommended: 45-50 MB Standalone Edition)
-            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.3/MyMusic-release.apk)**
-            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.3/MyMusic-debug.apk)**
+            - **[MyMusic-Player.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.4/MyMusic-Player.apk)** (⭐ Recommended: Standalone Edition)
+            - **[MyMusic-release.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.4/MyMusic-release.apk)**
+            - **[MyMusic-debug.apk](https://github.com/${{ github.repository }}/releases/download/v1.0.4/MyMusic-debug.apk)**
           files: build-artifacts/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
